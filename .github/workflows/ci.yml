@@ -58,6 +58,9 @@ jobs:
           cp .env.example .env
           php artisan key:generate
           php artisan config:clear
+          
+      - name: Generar rutas y formularios con Wayfinder
+        run: php artisan wayfinder:generate --with-form
 
       - name: Validar estilo PHP
         run: composer lint:check
