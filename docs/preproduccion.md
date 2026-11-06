@@ -12,7 +12,7 @@ a producción.
 ## Requisitos del ambiente
 
 - Sistema operativo: Ubuntu Linux
-- PHP: 8.3 o superior compatible con Composer
+- PHP: 8.5 o superior compatible con Composer
 - Composer: versión 2
 - Node.js: 22 para compilar recursos en CI
 - Servidor web: Apache o Nginx
