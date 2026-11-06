@@ -37,6 +37,18 @@ jobs:
           php artisan key:generate
           php artisan config:clear
 
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Instalar dependencias frontend
+        run: npm ci
+
+      - name: Compilar frontend
+        run: npm run build
+
       - name: Ejecutar pruebas
         env:
           APP_ENV: testing
