@@ -1,10 +1,11 @@
-
 # Configuración del ambiente de preproducción
 
 ## Proyecto
+
 Laravel CI Pipeline - Actividad 12
 
 ## Objetivo
+
 Establecer los requisitos para instalar y validar
 un artefacto Laravel antes de su liberación
 a producción.
