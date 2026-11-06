@@ -1,0 +1,171 @@
+
+name: Laravel Release Pipeline
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Generar artefacto Laravel
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Obtener codigo
+        uses: actions/checkout@v4
+
+      - name: Configurar PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo_sqlite, sqlite3, bcmath, fileinfo
+          coverage: none
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Validar Composer
+        run: composer validate
+
+      - name: Instalar dependencias para pruebas
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Preparar entorno de pruebas
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan config:clear
+
+      - name: Ejecutar pruebas Laravel
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+        run: php artisan test
+
+      - name: Instalar dependencias frontend
+        run: npm ci
+
+      - name: Compilar frontend
+        run: npm run build
+
+      - name: Preparar dependencias de produccion
+        run: |
+          composer install --no-dev --prefer-dist \
+            --no-interaction --no-progress \
+            --optimize-autoloader --no-scripts
+
+
+      - name: Eliminar entorno temporal
+        run: rm -f .env
+
+      - name: Determinar version
+        id: version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="v0.0.0-${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Generar artefacto
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PACKAGE="laravel-release-${VERSION}"
+
+          mkdir -p "/tmp/${PACKAGE}"
+
+          tar \
+            --exclude='./.git' \
+            --exclude='./.github' \
+            --exclude='./.env' \
+            --exclude='./.env.*' \
+            --exclude='./node_modules' \
+            --exclude='./tests' \
+            --exclude='./storage/logs/*' \
+            --exclude='./storage/framework/cache/data/*' \
+            --exclude='./storage/framework/sessions/*' \
+            --exclude='./storage/framework/views/*' \
+            --exclude='./database/*.sqlite' \
+            --exclude='./database/*.sqlite-*' \
+            --exclude='./.agents' \
+            --exclude='./.codex' \
+            --exclude='./docs' \
+            --exclude='./.gitignore' \
+            --exclude='./.gitattributes' \
+            --exclude='./AGENTS.md' \
+            --exclude='./phpunit.xml' \
+            --exclude='./phpstan.neon' \
+            --exclude='./pint.json' \
+            --exclude='./node_modules' \
+            --exclude='./package-lock.json' \
+            --exclude='./pnpm-workspace.yaml' \
+            --exclude='./tsconfig.json' \
+
+            -cf - . | tar -xf - -C "/tmp/${PACKAGE}"
+
+          tar -czf "${PACKAGE}.tar.gz" \
+            -C "/tmp/${PACKAGE}" .
+
+
+      - name: Verificar contenido del artefacto
+        shell: bash
+        run: |
+          ARCHIVE="laravel-release-${{ steps.version.outputs.version }}.tar.gz"
+
+          echo "Verificando integridad del paquete..."
+          tar -tzf "$ARCHIVE" > /tmp/release-files.txt
+
+          for FILE in \
+            "./artisan" \
+            "./composer.json" \
+            "./vendor/autoload.php" \
+            "./public/build/manifest.json" \
+            "./scripts/prepare-release.sh"; do
+
+            if ! grep -Fxq "$FILE" /tmp/release-files.txt; then
+              echo "ERROR: Falta $FILE"
+              exit 1
+            fi
+          done
+
+          echo "Comprobando archivos sensibles..."
+
+          if grep -Eq \
+            '(^|/)(\.env(\..*)?|\.git|id_rsa|id_ed25519|.*\.pem|.*\.key|.*\.sqlite)(/|$)' \
+            /tmp/release-files.txt; then
+            echo "ERROR: Se detectaron archivos potencialmente sensibles"
+            exit 1
+          fi
+
+          echo "Comprobando dependencias de desarrollo..."
+
+          if grep -Eq \
+            '^\./(node_modules|tests|\.github|\.git)/' \
+            /tmp/release-files.txt; then
+            echo "ERROR: El paquete contiene archivos de desarrollo"
+            exit 1
+          fi
+
+          echo "Artefacto validado correctamente"
+
+
+      - name: Publicar artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: laravel-release-${{ steps.version.outputs.version }}
+          path: laravel-release-${{ steps.version.outputs.version }}.tar.gz
+          retention-days: 7
+          if-no-files-found: error
