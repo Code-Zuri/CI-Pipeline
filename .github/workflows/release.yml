@@ -92,7 +92,7 @@ jobs:
 
           mkdir -p "/tmp/${PACKAGE}"
 
-          tar \
+          tar -cf - \
             --exclude='./.git' \
             --exclude='./.github' \
             --exclude='./.env' \
@@ -108,22 +108,19 @@ jobs:
             --exclude='./.agents' \
             --exclude='./.codex' \
             --exclude='./docs' \
-            --exclude='./.gitignore' \
-            --exclude='./.gitattributes' \
             --exclude='./AGENTS.md' \
             --exclude='./phpunit.xml' \
             --exclude='./phpstan.neon' \
             --exclude='./pint.json' \
-            --exclude='./node_modules' \
             --exclude='./package-lock.json' \
             --exclude='./pnpm-workspace.yaml' \
             --exclude='./tsconfig.json' \
-
-            -cf - . | tar -xf - -C "/tmp/${PACKAGE}"
+            . | tar -xf - -C "/tmp/${PACKAGE}"
 
           tar -czf "${PACKAGE}.tar.gz" \
             -C "/tmp/${PACKAGE}" .
 
+          echo "Artefacto generado: ${PACKAGE}.tar.gz"
 
       - name: Verificar contenido del artefacto
         shell: bash
